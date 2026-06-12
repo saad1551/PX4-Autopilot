@@ -244,5 +244,26 @@ param_modify_on_import_ret param_modify_on_import(bson_node_t node)
 		}
 	}
 
+	// 2026-06-12: COM_RC_OVERRIDE (per-mode enable bitmask) + COM_RC_STICK_OV (% stick deflection) merged
+	//             into COM_RC_OVR_SPEED (stick override velocity threshold, 0 = disabled).
+	{
+		if ((node->type == bson_type_t::BSON_INT32) && (strcmp("COM_RC_OVERRIDE", node->name) == 0)) {
+			// Preserve the enable/disable choice: any bit set -> enabled at the new default speed, 0 -> disabled.
+			const bool was_enabled = (node->i32 != 0);
+			node->d = was_enabled ? 1.0 : 0.0;
+			node->type = bson_type_t::BSON_DOUBLE;
+			strcpy(node->name, "COM_RC_OVR_SPEED");
+			PX4_INFO("migrating %s -> %s (%s)", "COM_RC_OVERRIDE", "COM_RC_OVR_SPEED", was_enabled ? "enabled" : "disabled");
+			return param_modify_on_import_ret::PARAM_MODIFIED;
+		}
+
+		// The old threshold was percent stick deflection; the new one is a velocity. The values are not
+		// comparable, so drop any saved COM_RC_STICK_OV and let COM_RC_OVR_SPEED keep its default/migrated value.
+		if (strcmp("COM_RC_STICK_OV", node->name) == 0) {
+			PX4_INFO("dropping obsolete %s (replaced by %s, units changed)", "COM_RC_STICK_OV", "COM_RC_OVR_SPEED");
+			return param_modify_on_import_ret::PARAM_SKIP_IMPORT;
+		}
+	}
+
 	return param_modify_on_import_ret::PARAM_NOT_MODIFIED;
 }

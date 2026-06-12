@@ -3122,34 +3122,19 @@ void Commander::manualControlCheck()
 			// but only if actually in air.
 			if (manual_control_setpoint.sticks_moving
 			    && !_vehicle_control_mode.flag_control_manual_enabled
+			    && (_vehicle_control_mode.flag_control_auto_enabled || _vehicle_control_mode.flag_control_offboard_enabled)
 			    && (_vehicle_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING)
 			   ) {
-				bool override_enabled = false;
-
-				if (_vehicle_control_mode.flag_control_auto_enabled) {
-					if (_param_com_rc_override.get() & static_cast<int32_t>(RcOverrideBits::AUTO_MODE_BIT)) {
-						override_enabled = true;
+				// If no failsafe is active, directly change the mode, otherwise pass the request to the failsafe state machine
+				if (_failsafe.selectedAction() <= FailsafeBase::Action::Warn) {
+					if (_user_mode_intention.change(vehicle_status_s::NAVIGATION_STATE_POSCTL, ModeChangeSource::User, true)) {
+						tune_positive(true);
+						mavlink_log_info(&_mavlink_log_pub, "Pilot took over using sticks\t");
+						events::send(events::ID("commander_rc_override"), events::Log::Info, "Pilot took over using sticks");
 					}
-				}
 
-				if (_vehicle_control_mode.flag_control_offboard_enabled) {
-					if (_param_com_rc_override.get() & static_cast<int32_t>(RcOverrideBits::OFFBOARD_MODE_BIT)) {
-						override_enabled = true;
-					}
-				}
-
-				if (override_enabled) {
-					// If no failsafe is active, directly change the mode, otherwise pass the request to the failsafe state machine
-					if (_failsafe.selectedAction() <= FailsafeBase::Action::Warn) {
-						if (_user_mode_intention.change(vehicle_status_s::NAVIGATION_STATE_POSCTL, ModeChangeSource::User, true)) {
-							tune_positive(true);
-							mavlink_log_info(&_mavlink_log_pub, "Pilot took over using sticks\t");
-							events::send(events::ID("commander_rc_override"), events::Log::Info, "Pilot took over using sticks");
-						}
-
-					} else {
-						_failsafe_user_override_request = true;
-					}
+				} else {
+					_failsafe_user_override_request = true;
 				}
 			}
 
